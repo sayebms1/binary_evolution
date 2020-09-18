@@ -1,12 +1,6 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-import h5py
-import numpy as np
-from functools import reduce
-from tqdm import tqdm
-import disk.funcs as dfn
-
 class binary_mbh(object):    
     
     def __init__(self, filename):
