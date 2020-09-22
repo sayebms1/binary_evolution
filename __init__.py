@@ -5,4 +5,4 @@ import numpy as np
 from functools import reduce
 from tqdm import tqdm
 import disk.funcs as dfn
-from . import binary_mbh
+from . import binary_evolution
