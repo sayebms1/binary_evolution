@@ -1,13 +1,18 @@
 #!/usr/bin/env python
 # coding: utf-8
-import h5py
+
 import numpy as np
 import tqdm
+from tqdm import tqdm
 from functools import reduce
+import disk.funcs as dfn
+import h5py
 
 class binary_mbh(object):    
-    
-    def __init__(self, filename):
+    def __init__(self, filename):    
+        self.parse_file(filename)
+
+    def parse_file(self, filename):
         self.filename = filename
         with h5py.File(self.filename, 'r') as f:
             self.SubhaloMassInHalfRadType = np.array(f['meta/SubhaloMassInHalfRadType'])
@@ -114,9 +119,6 @@ class binary_mbh(object):
         m1_after_disk = np.zeros(self.mtot.size)
         m2_after_disk = np.zeros(self.mtot.size)
         q_after_disk = -1*np.ones(self.mtot.size)
-        print (self.mtot.size)
-        for mm in tqdm(range(100000)):
-            continue
         for mm in tqdm(range(self.mtot.size)):
             
             ti = self.times[mm]
@@ -179,3 +181,31 @@ class binary_mbh(object):
 
             
         return mbin_after_insp
+
+    
+    
+    
+class inspiral(object):
+    def __init__(self):
+        self.spin_magnitudes()
+    
+    def spin_magnitudes(self,use_fgas = True):
+        abs_path = os.path.abspath(os.getcwd())
+        files= glob.glob('.'+os.path.join(abs_path,input_dir)+'*hdf5')
+        fspin = [s for s in files if "spin_magnitude" in s]
+        if use_fgas:
+            print ("spin magnitudes are gas ependent")
+            fspin = [s for s in fspin if "fgas" in s][0]
+            print ("result of if", fspin)
+        else:
+            fspin = [s for s in fspin if "fgas" in s][0]
+            print ("spin magnitudes are gas independent")
+    
+        with h5py.File(fspin,'r') as f:
+            primary_dimleesspins   =np.array(f['dimensionlessspins/primary'])
+            secondary_dimleesspins =np.array(f['dimensionlessspins/secondary'])
+            self.chi1 = primary_dimleesspins
+            self.chi2 = secondary_dimleesspins
+        return chi1, chi2
+        
+    
