@@ -7,6 +7,8 @@ from tqdm import tqdm
 from functools import reduce
 import disk.funcs as dfn
 import h5py
+import os
+import glob
 
 class binary_mbh(object):    
     def __init__(self, filename):    
@@ -186,10 +188,13 @@ class binary_mbh(object):
     
     
 class inspiral(object):
-    def __init__(self):
+    def __init__(self,filename):
         self.spin_magnitudes()
+        self.binary_mbh = binary_mbh(filename)
+        self.chi1, self.chi2 = self.spin_magnitudes()
     
     def spin_magnitudes(self,use_fgas = True):
+        input_dir = '/input/'
         abs_path = os.path.abspath(os.getcwd())
         files= glob.glob('.'+os.path.join(abs_path,input_dir)+'*hdf5')
         fspin = [s for s in files if "spin_magnitude" in s]
@@ -204,8 +209,8 @@ class inspiral(object):
         with h5py.File(fspin,'r') as f:
             primary_dimleesspins   =np.array(f['dimensionlessspins/primary'])
             secondary_dimleesspins =np.array(f['dimensionlessspins/secondary'])
-            self.chi1 = primary_dimleesspins
-            self.chi2 = secondary_dimleesspins
+            chi1 = primary_dimleesspins
+            chi2 = secondary_dimleesspins
         return chi1, chi2
         
     
