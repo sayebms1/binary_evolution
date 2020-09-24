@@ -9,13 +9,18 @@ import disk.funcs as dfn
 import h5py
 import os
 import glob
+import sys
+from matplotlib import pyplot as plt
 
 class binary_mbh(object):    
     def __init__(self, filename):    
         self.parse_file(filename)
 
-    def parse_file(self, filename):
+    def parse_file(self, filename, cgs_units=True):
+
         self.filename = filename
+        if cgs_units:
+            print ('The cgs units are used!')
         with h5py.File(self.filename, 'r') as f:
             self.SubhaloMassInHalfRadType = np.array(f['meta/SubhaloMassInHalfRadType'])
             self.SubhaloSFRinHalfRad = np.array(f['meta/SubhaloSFRinHalfRad'])
@@ -101,6 +106,41 @@ class binary_mbh(object):
             mbin_at_rdisk[mm] = self.mtot[mm] + np.nansum(dmi)
         return mbin_at_rdisk
     
+    def delta_mbin_df_lc(self):
+        """
+        finding mass growth upto disk phase
+        """
+        R_vd = self.find_Rvd()
+        mbin_df_lc = np.zeros(shape = self.mdot.shape)
+        for mm in tqdm(range(self.mtot.size)):
+            ti = self.times[mm]
+            mdoti = self.mdot[mm]
+            if np.isnan(np.sum(R_vd[mm])):
+                condition = (self.scales[mm] > 0.0) & (self.scales[mm] < 1.0) & (self.sep[mm]>np.nanmedian(R_vd[:,-1]))
+            else:
+                condition = (self.scales[mm] > 0.0) & (self.scales[mm] < 1.0) & (self.sep[mm]>R_vd[mm][-1])    
+#             print (np.where(condition)[0])
+            mbin_df_lc[mm] = np.full(mbin_df_lc[mm].shape, self.mtot[mm])
+#             print (mbin_df_lc[mm])
+            ti = ti[condition]
+            mdoti = mdoti[condition]
+            delta_ti = np.diff(ti)
+            mdot_av = 0.5*(mdoti[1:]+mdoti[:-1])
+            dmi = mdot_av*delta_ti            
+#             print (dmi.shape)
+            little_dm = 0
+            idx = np.where(condition)[0]
+            for ll in range(len(idx)-1):
+                little_dm = little_dm + dmi[ll]
+                mbin_df_lc[mm][ll+1] += little_dm
+                final_dm = mbin_df_lc[mm][ll+1]
+            mbin_df_lc[mm][~condition] = np.full(mbin_df_lc[mm][~condition].shape, final_dm)
+
+        return mbin_df_lc
+        
+    
+    
+    
     def find_mrgr_idx(self):
         idx_merged_by_z0     =[]
         idx_not_merged_by_z0 =[]
@@ -114,13 +154,15 @@ class binary_mbh(object):
     
     def dm_disk_phase(self):
         """
-        finding mass growth during disk phase
+        finding mass growth during disk phase. The inital binary mass in this phase comes
+        from the mass growth in the loss cone and dynamical friction phases.
         """
         R_vd = self.find_Rvd()
         R_gw = self.find_Rgw()
         m1_after_disk = np.zeros(self.mtot.size)
         m2_after_disk = np.zeros(self.mtot.size)
         q_after_disk = -1*np.ones(self.mtot.size)
+        mbin_at_rdisk = self.find_mbin_at_Rvd()
         for mm in tqdm(range(self.mtot.size)):
             
             ti = self.times[mm]
@@ -145,8 +187,11 @@ class binary_mbh(object):
             mdot_av = 0.5*(mdoti[1:]+mdoti[:-1])
             cond_idx = np.where(condition==True)
             qi = self.q[mm]
-            m1_fin = self.m1[mm]
-            m2_fin = self.m2[mm]
+            # add the binary mass growth during the LC and DF phases
+#             m1_fin_test = self.m1[mm]
+#             m2_fin_test = self.m2[mm]            
+            m1_fin = mbin_at_rdisk[mm]/(1+qi)
+            m2_fin = mbin_at_rdisk[mm]*qi/(1+qi)
             for jj in range(mdot_av.size):
                 mdot1, mdot2 = dfn.dm1dm2_lk(qi, mdot_av[jj])
                 dm1 = mdot1*delta_ti[jj]
@@ -199,7 +244,7 @@ class inspiral(object):
         files= glob.glob('.'+os.path.join(abs_path,input_dir)+'*hdf5')
         fspin = [s for s in files if "spin_magnitude" in s]
         if use_fgas:
-            print ("spin magnitudes are gas ependent")
+            print ("spin magnitudes are gas dependent")
             fspin = [s for s in fspin if "fgas" in s][0]
             print ("result of if", fspin)
         else:
@@ -213,4 +258,25 @@ class inspiral(object):
             chi2 = secondary_dimleesspins
         return chi1, chi2
         
-    
+    def modify_dadt_vd(factor=1, mass_growth=False):
+        dadt_vd = np.zeros(shape=mdot.shape)
+#         m1s = (np.ones(shape=self.binary_mbh.mdot.shape).T*m1).T
+#         m2s = (np.ones(shape=self.binary_mbh.mdot.shape).T*m2).T
+
+        if not mass_growth:
+            for i in tqdm(range(len(sep))):
+                inds = (self.binary_mbh.sep[i]>0.0) 
+                dadt_vd[i][inds],d1,regs,d3,d4 = disk_torq.harden(self.binary_mbh.sep[i][inds]
+                                                                  , self.binary_mbh.m1[i]
+                                                                  , self.binary_mbh.m2[i]
+                                                                  , self.binary_mbh.mdot[i][inds]/factor) 
+#                 dadt_vd[i][inds],d1,regs,d3,d4 = disk_torq.harden(sep[i][inds],m1s[i][inds],m2s[i][inds],mdot[i][inds]/factor) 
+                dadt_vd[i][inds] = np.abs(dadt_vd[i][inds])
+        elif mass_growth:
+            #substitute the new m1 and m2 masses
+                dadt_vd[i][inds],d1,regs,d3,d4 = disk_torq.harden(self.binary_mbh.sep[i][inds]
+                                                                  , self.binary_mbh.m1[i]
+                                                                  , self.binary_mbh.m2[i]
+                                                                  , self.binary_mbh.mdot[i][inds]/factor)
+            
+            
